@@ -1,11 +1,11 @@
+global printKKP
 SECTION .data
 msg db "KKP!!", 0ah
 msglen equ ($ - msg)
 SECTION .bss
 SECTION .text
-global _start
 
-_start:
+printKKP:
     mov eax, 4d
     mov ebx, 1d
     mov ecx, msg
