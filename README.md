@@ -1,4 +1,8 @@
-# readFAT
+# OS lab2：readFAT实验笔记
+
+#### FAT表项的存储
+
+由于FAT的每一项都是12位实际上比较难处理。由于不是整数byte，如果想要一个连续的存储（方便fread）实际上还是需要两个作为一个单位，之后再进行处理成单个的。
 
 ### print.asm
 
@@ -86,5 +90,54 @@ char* findDirEntry(const FILE * fp, const char * url, FILE result);
 两个str是否相等
 */
 int strEql(char* src, char* dest);
+```
+
+### 有待解决的问题
+
+#### FAT的读取
+
+使用位域的时候，读取的东西似乎出现了一些由于大小端产生的问题，但我不知道为什么。
+
+![](/home/leo/Desktop/TIM图片20191112235553.png)
+
+```C
+typedef struct FATentry2{
+    uint16_t entry  :12;
+    uint16_t entry2 :12;
+}FATEntry2;
+void setFAT(FILE* fp){
+    FATEntry2* FAT2 = (FATEntry2*) malloc(bpb.FATSz16 * bpb.BytesPerSec);//获取FAT表那么大的空间
+    int fileResult;
+    if((fileResult = fseek(fp, bpb.BytesPerSec, SEEK_SET)) == -1){
+        printStr("can't find FAT\n");
+        exit(EXIT_FAILURE);
+    }
+    if((fileResult = fread(FAT2, 1, bpb.FATSz16 * bpb.BytesPerSec, fp)) != bpb.FATSz16 * bpb.BytesPerSec){
+        printStr("can't read FAT\n");
+    }//读取的时候是连续的，所以每两个项是在3个Byte里面
+
+    int entryNum = 0;//FAT表项的数量
+    entryNum = bpb.FATSz16 * bpb.BytesPerSec * 2 / 3;//byte / 1.5是entry的总数
+    FAT = (uint16_t*) malloc(entryNum * 2);//给每个表项分配两个Byte
+    int a = 0, b = 0;
+    for(int i = 0; i < entryNum; i++){
+        a = i / 2;
+        b = i % 2;
+        // if(i % 2 == 0){
+        //     //高8位在第一个，低4位在第二个
+        //     // *(FAT + i)  = ((uint16_t)(FAT2 + a)->entry2[0]) << 4 + ((uint16_t)(FAT2 + a)->entry2[0]) & 0xF;
+            
+        // }else{
+        //     *(FAT + i)  = (uint16_t) (FAT2 + a)->entry2;
+        // }
+        
+        // uint16_t* haha = (uint16_t)(FAT + i);
+        // *haha = (b == 0) ? (FAT2 + a)->entry: (FAT2 + a)->entry2;
+        *(FAT + i) = (uint16_t)(b == 0) ? (FAT2 + a)->entry: (FAT2 + a)->entry2;
+    }
+    printf("stznsln\n");
+    free(FAT2);
+
+}
 ```
 

@@ -30,6 +30,11 @@ typedef struct entry{//32 byte
     uint16_t FstClust;//开始簇号
     uint32_t FileSize;//文件大小
 }Entry;
+typedef struct FATentry2{
+    // uint16_t entry  :12;
+    // uint16_t entry2 :12;
+    uint8_t entry2[3];
+}FATEntry2;
 #pragma pack ()
 
 //函数声明
@@ -42,9 +47,12 @@ void printStr(const char * str);
 void setBPB(FILE* fp);
 void readRootEntry(FILE* fp);
 int strEql(const char* src, const char* dest);
+void setFAT(FILE* fp);
 
 //全局变量
 BPB bpb;
+uint16_t* FAT;//指向FAT的第一个表项.用2个B来存一个12位的FAT表项。
+
 int main(int argc, char * argv[]){
     FILE *fp;
     if((fp = fopen(argv[1], "rb")) == NULL){
@@ -53,6 +61,7 @@ int main(int argc, char * argv[]){
     }
     
     setBPB(fp);
+    setFAT(fp);
     readRootEntry(fp);
     char inputStr[100];
     printStr("\033[31mkkp\n\033[0m");
@@ -105,7 +114,7 @@ void setBPB(FILE *fp){
 }
 int strEql(const char* src, const char* dest){
     int result = 1;
-    while(*src != '\0' && *dest != "\0"){
+    while(*src != '\0' && *dest != '\0'){
         if(*src != *dest){
             return 0;
         }
@@ -117,6 +126,41 @@ int strEql(const char* src, const char* dest){
     }else{
         return 1;
     }
+}
+void setFAT(FILE* fp){
+    FATEntry2* FAT2 = (FATEntry2*) malloc(bpb.FATSz16 * bpb.BytesPerSec);//获取FAT表那么大的空间
+    int fileResult;
+    if((fileResult = fseek(fp, bpb.BytesPerSec, SEEK_SET)) == -1){
+        printStr("can't find FAT\n");
+        exit(EXIT_FAILURE);
+    }
+    if((fileResult = fread(FAT2, 1, bpb.FATSz16 * bpb.BytesPerSec, fp)) != bpb.FATSz16 * bpb.BytesPerSec){
+        printStr("can't read FAT\n");
+    }//读取的时候是连续的，所以每两个项是在3个Byte里面
+
+    int entryNum = 0;//FAT表项的数量
+    entryNum = bpb.FATSz16 * bpb.BytesPerSec * 2 / 3;//byte / 1.5是entry的总数
+    FAT = (uint16_t*) malloc(entryNum * 2);//给每个表项分配两个Byte
+    int a = 0, b = 0;
+    for(int i = 0; i < entryNum; i++){
+        a = i / 2;
+        b = i % 2;
+        if(i % 2 == 0){
+            //高8位在第一个，低4位在第二个
+            *(FAT + i)  = (((uint16_t)(FAT2 + a)->entry2[0]) << 4) + ((((uint16_t)(FAT2 + a)->entry2[1]) & 0xF0) >> 4);
+            
+        }else{
+            *(FAT + i)  = ((((uint16_t) (FAT2 + a)->entry2[1]) & 0xF) << 8) + ((uint16_t)(FAT2 + a)->entry2[2]);
+        }
+        
+        // uint16_t* haha = (uint16_t)(FAT + i);
+        // *haha = (b == 0) ? (FAT2 + a)->entry: (FAT2 + a)->entry2;
+        // *(FAT + i) = (uint16_t)(b == 0) ? (FAT2 + a)->entry: (FAT2 + a)->entry2;
+        
+    }
+    printf("stznsln\n");
+    free(FAT2);
+
 }
 #ifdef DEBUG
 void printStr(const char * str){
