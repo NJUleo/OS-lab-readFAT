@@ -100,29 +100,29 @@ fp是文件指针，cluster定位到的当前目录的目录项
 打印当前表项的子文件名，//然后递归调用所有的簇
 就认为这个文件夹表项小于512。cnm
 */
-void printDirName(const FILE * fp, int cluster);
+void printDirName(FILE * fp, int cluster);
 /*
 fp是文件指针，cluster定位到的当前目录的目录项
 -l格式打印当前下的文件名（文件夹写出子文件夹和子文件数目，文件写出大小）
 对于子目录会进行递归调用
 */
-void printDirL(const FILE * fp, int cluster);
+void printDirL(FILE * fp, int cluster);
 /*
 fp文件指针，cluster指向的目录项代表的目录的子文件夹和子文件数目（不算. and ..）
 结果写在*dirNum 和*arcNum中
 */
-void getDirSubNum(const FILE * fp, int cluster, int * dirNum, int * arcNum);
+void getDirSubNum(FILE * fp, int cluster, int * dirNum, int * arcNum);
 /*
 cat文件。fp文件指针，clust是簇号，length是剩余的长度。递归调用
 */
-void catArc(const FILE * fp, int clust, int length);
+void catArc(FILE * fp, int clust, int length);
 /*
 从当前目录项下，找到url对应的目录的目录项。（递归调用直到url只剩一个文件名）
 fp文件指针，cluster指向是当前目录的目录项的簇号。通过cluster这个簇号来返回。
 返回目标对象的文件名（可能是目录也可能是文件）
 如果没找到，直接返回空串。（注意是字符串，不是空。）
 */
-char* findDirEntry(const FILE * fp, int clusterSrc, const char * url, int* clusterRes);
+char* findDirEntry(FILE * fp, int clusterSrc, const char * url, int* clusterRes);
 /*
 两个str是否相等
 */

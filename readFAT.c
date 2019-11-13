@@ -59,23 +59,23 @@ fp是文件指针，cluster定位到的当前目录的目录项
 -l格式打印当前下的文件名（文件夹写出子文件夹和子文件数目，文件写出大小）
 对于子目录会进行递归调用
 */
-void printDirL(const FILE * fp, int cluster);
+void printDirL(FILE * fp, int cluster);
 /*
 fp文件指针，cluster指向的目录项代表的目录的子文件夹和子文件数目（不算. and ..）
 结果写在*dirNum 和*arcNum中
 */
-void getDirSubNum(const FILE * fp, int cluster, int * dirNum, int * arcNum);
+void getDirSubNum(FILE * fp, int cluster, int * dirNum, int * arcNum);
 /*
 cat文件。fp文件指针，clust是簇号，length是剩余的长度。递归调用
 */
-void catArc(const FILE * fp, int clust, int length);
+void catArc(FILE * fp, int clust, int length);
 /*
 从当前目录项下，找到url对应的目录的目录项。（递归调用直到url只剩一个文件名）
 fp文件指针，cluster指向是当前目录的目录项的簇号。通过cluster这个簇号来返回。
 返回目标对象的文件名（可能是目录也可能是文件）
 如果没找到，直接返回空串。（注意是字符串，不是空。）
 */
-char* findDirEntry(const FILE * fp, int clusterSrc, const char * url, int* clusterRes);
+char* findDirEntry(FILE * fp, int clusterSrc, const char * url, int* clusterRes);
 /*
 字符串拼接
 */
@@ -132,7 +132,11 @@ void readRootEntry(FILE* fp){
     fread(&entry, 8, sizeof(Entry), fp);
 
     printStr("Root Entry read\n");
-    printDir(fp, entry[0].FstClust);
+    //test
+    printDir(fp, entry[1].FstClust);
+    int a = 0;
+    int b = 0;
+    getDirSubNum(fp, entry[1].FstClust, &a, &b);
     // if(entry[0].Attr == 0x10){
     //     //try sub dir, find it's entry and put it to subEntry;
     //     Entry subEntry[3];
@@ -209,6 +213,24 @@ void setFAT(FILE* fp){
     free(FAT2);
 
 }
+void getDirSubNum(FILE * fp, int cluster, int * dirNum, int * arcNum){
+    Entry subEntry[16];//cnm，假设文件夹里最多16个文件
+    fseek(fp, (dataSector + cluster * bpb.SecPerClus) * bpb.BytesPerSec, SEEK_SET);
+    fread(subEntry, bpb.BytesPerSec, 1, fp);
+    *dirNum = 0;
+    *arcNum = 0;
+    for(int i = 2; i < 16; i++){//不算. and ..
+        if(subEntry[i].Attr == 0x10){
+            //is Dir
+            (*dirNum)++;
+        }else if(strEql(subEntry[i].NAME, "")){
+            //notFile
+        }else{
+            //FILE
+            (*arcNum)++;
+        }
+    }
+}
 void printDir(FILE * fp, int cluster){
     Entry subEntry[16];//cnm，假设文件夹里最多16个文件
     fseek(fp, (dataSector + cluster * bpb.SecPerClus) * bpb.BytesPerSec, SEEK_SET);
@@ -220,7 +242,7 @@ void printDir(FILE * fp, int cluster){
         if(subEntry[i].Attr == 0x10){
             //is Dir
             printRedName(subEntry[i].NAME);
-        }else if(subEntry[i].Attr == 0){
+        }else if(strEql(subEntry[i].NAME, "")){
             //notFile
         }else{
             //FILE
