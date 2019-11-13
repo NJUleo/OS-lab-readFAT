@@ -48,12 +48,53 @@ void setBPB(FILE* fp);
 void readRootEntry(FILE* fp);
 int strEql(const char* src, const char* dest);
 void setFAT(FILE* fp);
+void setDataSector();
+/*
+fp是文件指针，cluster定位到的当前目录的目录项
+打印当前下的文件名，然后递归调用所有的子文件夹
+*/
+void printDir(FILE * fp, int cluster);
+/*
+fp是文件指针，cluster定位到的当前目录的目录项
+-l格式打印当前下的文件名（文件夹写出子文件夹和子文件数目，文件写出大小）
+对于子目录会进行递归调用
+*/
+void printDirL(const FILE * fp, int cluster);
+/*
+fp文件指针，cluster指向的目录项代表的目录的子文件夹和子文件数目（不算. and ..）
+结果写在*dirNum 和*arcNum中
+*/
+void getDirSubNum(const FILE * fp, int cluster, int * dirNum, int * arcNum);
+/*
+cat文件。fp文件指针，clust是簇号，length是剩余的长度。递归调用
+*/
+void catArc(const FILE * fp, int clust, int length);
+/*
+从当前目录项下，找到url对应的目录的目录项。（递归调用直到url只剩一个文件名）
+fp文件指针，cluster指向是当前目录的目录项的簇号。通过cluster这个簇号来返回。
+返回目标对象的文件名（可能是目录也可能是文件）
+如果没找到，直接返回空串。（注意是字符串，不是空。）
+*/
+char* findDirEntry(const FILE * fp, int clusterSrc, const char * url, int* clusterRes);
+/*
+字符串拼接
+*/
+char* strAdd(const char* src, const char* dest);
+/*
+打印红色字符
+*/
+void printRed(const char* src);
+void printName(const char* src);
+void printRedName(const char* src);
 
 //全局变量
 BPB bpb;
 uint16_t* FAT;//指向FAT的第一个表项.用2个B来存一个12位的FAT表项。
+int dataSector;
+
 
 int main(int argc, char * argv[]){
+
     FILE *fp;
     if((fp = fopen(argv[1], "rb")) == NULL){
         printf("can't open file %s\n", argv[1]);
@@ -62,9 +103,10 @@ int main(int argc, char * argv[]){
     
     setBPB(fp);
     setFAT(fp);
+    setDataSector();
     readRootEntry(fp);
     char inputStr[100];
-    printStr("\033[31mkkp\n\033[0m");
+    printStr("\033[31mkkp  k\n\033[0m");
     while(1){
         scanf("%s", inputStr);
         if(!strcmp(inputStr, "ls")){
@@ -88,18 +130,23 @@ void readRootEntry(FILE* fp){
     Entry* entries = (Entry*) malloc(2 * sizeof(Entry));
     Entry entry[8];
     fread(&entry, 8, sizeof(Entry), fp);
+
     printStr("Root Entry read\n");
-    if(entry[0].Attr == 0x10){
-        //try sub dir, find it's entry and put it to subEntry;
-        Entry subEntry[3];
-        int rootDirSectors = (bpb.RootEntCnt * 32 + bpb.BytesPerSec - 1) / bpb.BytesPerSec;
-        int dataSector = rootDirSectors + 1 + bpb.NumFATs * bpb.FATSz16;
-        int subEntrySector = dataSector + entry[0].FstClust * bpb.SecPerClus - 2;//数据区的第一个簇是簇2
-        int subDirEntryBase = subEntrySector * bpb.BytesPerSec;
-        fseek(fp, subDirEntryBase, SEEK_SET);
-        fread(&subEntry, 3, sizeof(Entry), fp);
-        printStr("try sub Entry");
-    }
+    printDir(fp, entry[0].FstClust);
+    // if(entry[0].Attr == 0x10){
+    //     //try sub dir, find it's entry and put it to subEntry;
+    //     Entry subEntry[3];
+    //     int subEntrySector = dataSector + entry[0].FstClust * bpb.SecPerClus ;//数据区的第一个簇是簇2
+    //     int subDirEntryBase = subEntrySector * bpb.BytesPerSec;
+    //     fseek(fp, subDirEntryBase, SEEK_SET);
+    //     fread(&subEntry, 3, sizeof(Entry), fp);
+    //     printStr("try sub Entry");
+    // }
+}
+void setDataSector(){
+    //设定全局变量：数据区簇号。
+    int rootDirSectors = (bpb.RootEntCnt * 32 + bpb.BytesPerSec - 1) / bpb.BytesPerSec;
+    dataSector = rootDirSectors + 1 + bpb.NumFATs * bpb.FATSz16 - 2;//数据区第一个簇（簇2）的绝对簇号。由于数据区的第一个簇是2，所以计算绝对簇号的时候要减去2。这几个分别是，根目录的簇数量，引导扇区，FAT占据的簇。使用的时候，用数据簇号加上这个就行了。
 }
 void setBPB(FILE *fp){
     int fileResult;
@@ -158,13 +205,109 @@ void setFAT(FILE* fp){
         // *(FAT + i) = (uint16_t)(b == 0) ? (FAT2 + a)->entry: (FAT2 + a)->entry2;
         
     }
-    printf("stznsln\n");
+    
     free(FAT2);
 
 }
+void printDir(FILE * fp, int cluster){
+    Entry subEntry[16];//cnm，假设文件夹里最多16个文件
+    fseek(fp, (dataSector + cluster * bpb.SecPerClus) * bpb.BytesPerSec, SEEK_SET);
+    fread(subEntry, bpb.BytesPerSec, 1, fp);
+    for(int i = 0; i < 16; i++){
+        if(i != 0){
+            printStr("  ");
+        }
+        if(subEntry[i].Attr == 0x10){
+            //is Dir
+            printRedName(subEntry[i].NAME);
+        }else if(subEntry[i].Attr == 0){
+            //notFile
+        }else{
+            //FILE
+            printName(subEntry[i].NAME);
+        }
+    }
+    printStr("\n");
+    // Entry * subEntries = malloc(bpb.BytesPerSec);//Entry总共占有一个簇那么多的空间。
+    // int entryNum = bpb.BytesPerSec / sizeof(Entry);//共有几个表单项
+    // fseek(fp, (dataSector + cluster * bpb.SecPerClus) * bpb.BytesPerSec, SEEK_SET);
+    // fread(subEntries, bpb.BytesPerSec, 1, fp);
+    // //printStr(":\n");
+    // char sname[4];//后缀名的字符串
+    // //打印当前的簇中所有文件名。
+    // for(int i = 0; i < entryNum; i++){
+    //     if(!strEql((subEntries + i)->NAME, "")){//如果不是空的
+    //         if(subEntries[i].Attr == 0x10){
+    //             //is dir
+    //             printRedName((subEntries + i) -> NAME);
+    //         }else{
+    //             printStrName((subEntries + i) -> NAME);
+    //             printStr(".");
+    //             sname[3] = '\0';
+    //             sname[0] = *((subEntries + i) -> NAME + 8);
+    //             sname[1] = *((subEntries + i) -> NAME + 9);
+    //             sname[2] = *((subEntries + i) -> NAME + 10);
+    //             printStr(sname);
+
+    //         }
+    //         printStr("  ");
+    //     }
+        
+    // }
+    // free(subEntries);
+    //TODO:暂时假设一个文件夹最多就是16个子文件
+    // //如果还有下一簇，则递归调用
+    // if(FAT[cluster] == 0xFF7){
+    //     printStr("\nbad cluster\n");
+    // }else if(FAT[cluster] >= 0xFF8){
+    //     //最后一个表项文件名都已经打印完毕
+    //     printStr("\n");
+    // }else{
+    //     printDir(fp, FAT[cluster]);
+    // }
+}
+void printRed(const char* src){
+    printStr("\033[31m");
+    printStr(src);
+    printStr("\033[0m");
+}
+void printRedName(const char* src){
+    char name[9];
+    int i = 0;
+    for(i = 0; i < 8;i++){
+        if(*(src + i) == ' '){
+            name[i] = '\0';
+        }else{
+            name[i] = *(src + i);
+        }
+    }
+    name[8] = '\0';
+    printRed(name);
+}
+void printName(const char* src){
+    char str[12];
+    int i = 0;
+    while(*(src + i) != ' '){
+        str[i] = *(src + i);
+        i++;
+    }
+    str[i] = '.';
+    str[i + 1] = *(src + 8);
+    str[i + 2] = *(src + 9);
+    str[i + 3] = *(src + 10);
+    str[i + 4] = '\0';
+    printStr(str);
+
+}
+
 #ifdef DEBUG
 void printStr(const char * str){
     printf("%s", str);
-    fflush(stdout);
+    // char* ptr = str;
+    // while(*ptr != 32){
+    //     printf("%c", ptr);
+    //     ptr++;
+    // }
+    // fflush(stdout);
 }
 #endif
