@@ -102,6 +102,10 @@ fp是文件指针，cluster定位到的当前目录的目录项
 */
 void printDirName(FILE * fp, int cluster);
 /*
+url包括了路径和当前文件的文件名。
+*/
+void printDir(FILE * fp, int cluster, char* url);
+/*
 fp是文件指针，cluster定位到的当前目录的目录项
 -l格式打印当前下的文件名（文件夹写出子文件夹和子文件数目，文件写出大小）
 对于子目录会进行递归调用
