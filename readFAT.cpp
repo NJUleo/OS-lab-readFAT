@@ -2,6 +2,7 @@
 #include <iostream>
 #include <stdlib.h>
 #include <string>
+#include <vector>
 using namespace std;
 
 
@@ -51,22 +52,6 @@ void printStr(string str);
 #endif
 void setBPB(FILE* fp);
 void readRootEntry(FILE* fp);
-// int strEql(const char* src, const char* dest){
-//     int result = 1;
-//     while(*src != '\0' && *dest != '\0'){
-//         if(*src != *dest){
-//             return 0;
-//         }
-//         src++;
-//         dest++;
-//     }
-//     if(*src != *dest){
-//         return 0;
-//     }else{
-//         return 1;
-//     }
-// }
-// int strEql(const char* src, const char* dest);
 void setFAT(FILE* fp);
 void setDataSector();
 /*
@@ -74,12 +59,13 @@ fp是文件指针，cluster定位到的当前目录的目录项
 打印当前下的文件名，
 */
 void printDirName(FILE * fp, int cluster);
+void printDirNameL(FILE * fp, int cluster);
 /*
 fp是文件指针，cluster定位到的当前目录的目录项
 -l格式打印当前下的文件名（文件夹写出子文件夹和子文件数目，文件写出大小）
 对于子目录会进行递归调用
 */
-void printDirL(FILE * fp, int cluster);
+void printDirL(FILE * fp, int cluster, string url);
 /*
 fp文件指针，cluster指向的目录项代表的目录的子文件夹和子文件数目（不算. and ..）
 结果写在*dirNum 和*arcNum中
@@ -110,11 +96,18 @@ url包括了路径和当前文件的文件名。
 */
 void printDir(FILE * fp, int cluster, string url);
 //由于根目录的cluster的号和数据区的不一样，单独处理。
-void printRootDir(FILE * fp);
+// void printRootDir(FILE * fp);
 void printURL(FILE* fp, string url);
+void printURLL(FILE* fp, string url);
 string NAME2Str(char* NAME);
 string getFirstNameUrl(string url);
 string validateURL(string url);//处理一下url前后的“/”问题
+/*
+分割字符串
+*/
+vector<string> splitStr(string str, string s);
+bool isL(string str);
+bool isManyL(vector<string> src);
 
 
 //全局变量
@@ -136,20 +129,56 @@ int main(int argc, char * argv[]){
     setBPB(fp);
     setFAT(fp);
     setDataSector();
-    //readRootEntry(fp);
-    printURL(fp, "/");
-    printURL(fp, "/HOUSE/");
-    string input;
-    while(1){
-        cout << "kkp:";
-        cin >> input;
-        printURL(fp, input);
-    }
-    printStr("\033[31mkkp  k\n\033[0m");
 
-    printStr("kkp");
+    string input;
+    vector<string> inputSplit;
+    while(1){
+        printStr(">");
+        getline(cin, input);
+        inputSplit = splitStr(input, " ");
+        if(inputSplit.at(0) == "exit"){
+            break;
+        }else if(inputSplit.at(0) == "ls"){
+            if(inputSplit.size() == 1){
+                printURL(fp, "/");
+            }else if(inputSplit.size() == 2){
+                printURL(fp, inputSplit.at(1));
+            }else{
+                if(inputSplit.size() == 3){
+                    if(isL(inputSplit.at(2))){
+                        printURLL(fp, inputSplit.at(1));
+                        continue;
+                    }else if(isL(inputSplit.at(1))){
+                        printURLL(fp, inputSplit.at(2));
+                        continue;
+                    }
+                }else{
+                    if(isL(inputSplit.at(1))){
+                        if(isManyL(inputSplit)){
+                            printURLL(fp, inputSplit.at(2));
+                            continue;
+                        }
+                    }else if(isL(inputSplit.at(2))){
+                        if(isManyL(inputSplit)){
+                            printURLL(fp, inputSplit.at(1));
+                            continue;
+                        }
+                    }
+                }
+                printStr("invalid param for ls\n");
+            }
+        }else if(inputSplit.at(0) == "cat"){
+            cout << "cat\n";
+        }else{
+            printStr("invalid command\n");
+            continue;
+        }
+        
+    }
+    printStr("\033[31mGOODBYE AND GOOD LUCK\nNEVER GIVE UP\n\033[0m");
+
     
-    
+    fclose(fp);
     return 0;
 }
 void readRootEntry(FILE* fp){
@@ -196,21 +225,6 @@ void setBPB(FILE *fp){
     }
     
 }
-// int strEql(const char* src, const char* dest){
-//     int result = 1;
-//     while(*src != '\0' && *dest != '\0'){
-//         if(*src != *dest){
-//             return 0;
-//         }
-//         src++;
-//         dest++;
-//     }
-//     if(*src != *dest){
-//         return 0;
-//     }else{
-//         return 1;
-//     }
-// }
 void setFAT(FILE* fp){
     FATEntry2* FAT2 = (FATEntry2*) malloc(bpb.FATSz16 * bpb.BytesPerSec);//获取FAT表那么大的空间
     int fileResult;
@@ -252,7 +266,10 @@ void getDirSubNum(FILE * fp, int cluster, int * dirNum, int * arcNum){
     fread(subEntry, bpb.BytesPerSec, 1, fp);
     *dirNum = 0;
     *arcNum = 0;
-    for(int i = 2; i < 16; i++){//不算. and ..
+    for(int i = 0; i < 16; i++){//不算. and ..
+        if(NAME2Str(subEntry[i].NAME) == "." || NAME2Str(subEntry[i].NAME) == ".."){
+            continue;
+        }
         if(subEntry[i].Attr == 0x10){
             //is Dir
             (*dirNum)++;
@@ -309,46 +326,8 @@ void printDirName(FILE * fp, int cluster){
             printStr(NAME2Str(subEntry[i].NAME));
         }
     }
-    printStr("\n");
+    //printStr("\n");
     
-
-    // Entry * subEntries = malloc(bpb.BytesPerSec);//Entry总共占有一个簇那么多的空间。
-    // int entryNum = bpb.BytesPerSec / sizeof(Entry);//共有几个表单项
-    // fseek(fp, (dataSector + cluster * bpb.SecPerClus) * bpb.BytesPerSec, SEEK_SET);
-    // fread(subEntries, bpb.BytesPerSec, 1, fp);
-    // //printStr(":\n");
-    // char sname[4];//后缀名的字符串
-    // //打印当前的簇中所有文件名。
-    // for(int i = 0; i < entryNum; i++){
-    //     if(!strEql((subEntries + i)->NAME, "")){//如果不是空的
-    //         if(subEntries[i].Attr == 0x10){
-    //             //is dir
-    //             printRedName((subEntries + i) -> NAME);const char *
-    //         }else{
-    //             printStrName((subEntries + i) -> NAME);
-    //             printStr(".");
-    //             sname[3] = '\0';
-    //             sname[0] = *((subEntries + i) -> NAME + 8);
-    //             sname[1] = *((subEntries + i) -> NAME + 9);
-    //             sname[2] = *((subEntries + i) -> NAME + 10);
-    //             printStr(sname);
-
-    //         }
-    //         printStr("  ");
-    //     }
-        
-    // }
-    // free(subEntries);
-    //TODO:暂时假设一个文件夹最多就是16个子文件
-    // //如果还有下一簇，则递归调用
-    // if(FAT[cluster] == 0xFF7){
-    //     printStr("\nbad cluster\n");
-    // }else if(FAT[cluster] >= 0xFF8){
-    //     //最后一个表项文件名都已经打印完毕
-    //     printStr("\n");
-    // }else{
-    //     printDir(fp, FAT[cluster]);
-    // }
 }
 void printRed(const string src){
     // printStr("\033[31m");
@@ -376,9 +355,10 @@ string NAME2Str(char* NAME){
     return result;
 }
 
-void printRootDir(FILE * fp){
-    printDir(fp, 19 - 31, "/");
-}
+
+// void printRootDir(FILE * fp){
+//     printDir(fp, 19 - 31, "/");
+// }
 
 
 int findDirEntry(FILE * fp, int clusterSrc, string url){
@@ -426,10 +406,6 @@ string getFirstNameUrl(string url){
     return "";
 }
 void printURL(FILE* fp, string url){
-    if(url == "/"){
-        printRootDir(fp);
-        return;
-    }
     url = validateURL(url);
     int cluster = findDirEntry(fp, 19 - 31, url);
     if(cluster == -1){
@@ -438,6 +414,16 @@ void printURL(FILE* fp, string url){
     }
     printDir(fp, cluster, url);
 }
+void printURLL(FILE* fp, string url){
+    url = validateURL(url);
+    int cluster = findDirEntry(fp, 19 - 31, url);
+    if(cluster == -1){
+        printStr("path error.\n");
+        return;
+    }
+    printDirL(fp, cluster, url);
+}
+
 string validateURL(string url){
     if(url.at(0) != '/'){
         url = "/" + url;
@@ -445,6 +431,94 @@ string validateURL(string url){
     if(url.at(url.length() - 1) != '/'){
         url = url + "/";
     }
+    return url;
+}
+void printDirL(FILE * fp, int cluster, string url){
+    if(url.at(url.length() - 1) == '/'){
+        url = url.substr(0, url.length() - 1);
+    }
+    Entry subEntry[16];//cnm，假设文件夹里最多16个文件
+    fseek(fp, (dataSector + cluster * bpb.SecPerClus) * bpb.BytesPerSec, SEEK_SET);
+    fread(subEntry, bpb.BytesPerSec, 1, fp);
+    printStr(url + "/ ");
+    int dirNum = 0, arcNum = 0;
+    getDirSubNum(fp, cluster, &dirNum, &arcNum);
+    printStr(to_string(dirNum) + " " + to_string(arcNum) + ":\n");
+    printDirNameL(fp, cluster);
+    //printStr("\n");
+    for(int i = 0; i < 16; i++){
+
+        if(subEntry[i].Attr == 0x10){
+            //is Dir
+            if(NAME2Str(subEntry[i].NAME) != "." && NAME2Str(subEntry[i].NAME) != ".."){
+                printDirL(fp, subEntry[i].FstClust, url + "/" + NAME2Str(subEntry[i].NAME));
+            }
+        }
+    }
+}
+void printDirNameL(FILE * fp, int cluster){
+    Entry subEntry[16];//cnm，假设文件夹里最多16个文件
+    fseek(fp, (dataSector + cluster * bpb.SecPerClus) * bpb.BytesPerSec, SEEK_SET);
+    fread(subEntry, bpb.BytesPerSec, 1, fp);
+    int dirNum = 0, arcNum = 0;
+    for(int i = 0; i < 16; i++){
+        if(i != 0){
+            printStr("\n");
+        }
+        if(subEntry[i].Attr == 0x10){
+            //is Dir
+            printRed(NAME2Str(subEntry[i].NAME));
+            if(NAME2Str(subEntry[i].NAME) != "." && NAME2Str(subEntry[i].NAME) != ".."){
+                //如果不是这两个，就打印哪个数值
+                getDirSubNum(fp, subEntry[i].FstClust, &dirNum, &arcNum);
+                printStr(" " + to_string(dirNum) + " " + to_string(arcNum));
+            }
+        }else if(subEntry[i].NAME[0] == 0){
+            //notFile
+            break;
+        }else{
+            //FILE
+            // printName(subEntry[i].NAME);
+            printStr(NAME2Str(subEntry[i].NAME));
+            printStr(" " + to_string(subEntry[i].FileSize));
+        }
+    }
+    printStr("\n");
+}
+vector<string> splitStr(string str, string s){
+    int start = 0;
+    vector<string> result = vector<string>();
+    for(int i = 1; i  + s.length() <= str.length(); i++){
+        if(str.substr(i, s.length()) == s){
+            if(i != start){
+                result.push_back(str.substr(start, i - start));
+            }
+            start = i + s.length();
+        }
+    }
+    if(start != str.length()){
+        result.push_back(str.substr(start));
+    }
+    return result;
+}
+bool isL(string str){
+    if(str.length() < 2){
+        return false;
+    }
+    for(int i = 1; i < str.length(); i++){
+        if(str.at(i) != 'l'){
+            return false;
+        }
+    }
+    return true;
+}
+bool isManyL(vector<string> src){
+    for(int i = 3; i < src.size(); i++){
+        if(!isL(src.at(i))){
+            return false;
+        }
+    }
+    return true;
 }
 #ifdef DEBUG
 void printStr(string str){
