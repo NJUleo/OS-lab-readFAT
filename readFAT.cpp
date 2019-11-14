@@ -74,7 +74,7 @@ void getDirSubNum(FILE * fp, int cluster, int * dirNum, int * arcNum);
 /*
 cat文件。fp文件指针，clust是簇号，length是剩余的长度。递归调用
 */
-void catArc(FILE * fp, int clust, int length);
+void catArc(FILE * fp, int clust, string FileName);
 /*
 从当前目录项下，找到url对应的目录的目录项。（递归调用直到url只剩一个文件名）
 fp文件指针，cluster指向是当前目录的目录个it项的簇号。通过cluster这个簇号来返回。
@@ -97,6 +97,7 @@ url包括了路径和当前文件的文件名。
 void printDir(FILE * fp, int cluster, string url);
 //由于根目录的cluster的号和数据区的不一样，单独处理。
 // void printRootDir(FILE * fp);
+void catURL(FILE* fp, string url);
 void printURL(FILE* fp, string url);
 void printURLL(FILE* fp, string url);
 string NAME2Str(char* NAME);
@@ -108,7 +109,9 @@ string validateURL(string url);//处理一下url前后的“/”问题
 vector<string> splitStr(string str, string s);
 bool isL(string str);
 bool isManyL(vector<string> src);
-
+string getFileNameFromURL(string url);
+void catFile(FILE * fp, int cluster, int size);
+string getFileNameFromURL(string url);
 
 //全局变量
 BPB bpb;/*
@@ -168,7 +171,7 @@ int main(int argc, char * argv[]){
                 printStr("invalid param for ls\n");
             }
         }else if(inputSplit.at(0) == "cat"){
-            cout << "cat\n";
+            catURL(fp, inputSplit.at(1));
         }else{
             printStr("invalid command\n");
             continue;
@@ -423,7 +426,47 @@ void printURLL(FILE* fp, string url){
     }
     printDirL(fp, cluster, url);
 }
-
+void catURL(FILE* fp, string url){
+    if(url.at(0) != '/'){
+        url = "/" + url;
+    }
+    string FileName = getFileNameFromURL(url);
+    string DirURL = url.substr(0, url.length() - FileName.length());
+    int DirCluster = findDirEntry(fp, 19 - 31, DirURL);
+    if(DirCluster == -1){
+        printStr("path error.\n");
+        return;
+    }
+    catArc(fp, DirCluster, FileName);
+    return;
+}
+void catArc(FILE * fp, int cluster, string FileName){
+    Entry subEntry[16];//cnm，假设文件夹里最多16个文件
+    fseek(fp, (dataSector + cluster * bpb.SecPerClus) * bpb.BytesPerSec, SEEK_SET);
+    fread(subEntry, bpb.BytesPerSec, 1, fp);
+    for(int i = 0; i < 16; i++){
+        if(NAME2Str(subEntry[i].NAME) == FileName){
+            catFile(fp, subEntry[i].FstClust, subEntry[i].FileSize);
+            return;
+        }
+    }
+    printStr("can't find this file\n");
+}
+void catFile(FILE * fp, int cluster, int size){
+    char buf[513];
+    if(size <= bpb.BytesPerSec){
+        fseek(fp, (dataSector + cluster * bpb.SecPerClus) * bpb.BytesPerSec, SEEK_SET);
+        fread(buf, size, 1, fp);
+        buf[size] = '\0';
+        printStr(buf);
+    }else{
+        fseek(fp, (dataSector + cluster * bpb.SecPerClus) * bpb.BytesPerSec, SEEK_SET);
+        fread(buf, bpb.BytesPerSec, 1, fp);
+        buf[512] = '\0';
+        printStr(buf);
+        catFile(fp, *(FAT + cluster), size - bpb.BytesPerSec);
+    }
+}
 string validateURL(string url){
     if(url.at(0) != '/'){
         url = "/" + url;
@@ -520,15 +563,18 @@ bool isManyL(vector<string> src){
     }
     return true;
 }
+string getFileNameFromURL(string url){
+    int start = 0;
+    for(int i = url.length() - 1; i >=0; i--){
+        if(url.at(i) == '/'){
+            start = i + 1;
+            break;
+        }
+    }
+    return url.substr(start);
+}
 #ifdef DEBUG
 void printStr(string str){
     cout << str;
-    //printf("%s", str);
-    // char* ptr = str;
-    // while(*ptr != 32){
-    //     printf("%c", ptr);
-    //     ptr++;
-    // }
-    // fflush(stdout);
 }
 #endif
