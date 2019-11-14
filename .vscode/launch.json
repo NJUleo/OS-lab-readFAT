@@ -10,7 +10,7 @@
             "request": "launch",
             "program": "${fileDirname}/${fileBasenameNoExtension}",
             "args": [
-                "${fileDirname}/ref.img"
+                "${fileDirname}/a.img"
             ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",

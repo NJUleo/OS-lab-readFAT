@@ -122,16 +122,16 @@ cat文件。fp文件指针，clust是簇号，length是剩余的长度。递归�
 void catArc(FILE * fp, int clust, int length);
 /*
 从当前目录项下，找到url对应的目录的目录项。（递归调用直到url只剩一个文件名）
-fp文件指针，cluster指向是当前目录的目录项的簇号。通过cluster这个簇号来返回。
+fp文件指针，cluster指向是当前目录（最开始的时候是根目录）的目录项的簇号。通过cluster这个簇号来返回。
 返回目标对象的文件名（可能是目录也可能是文件）
-如果没找到，直接返回空串。（注意是字符串，不是空。）
+如果没找到或者最后一项是一个文件，直接返回空串，cluster为-1。（注意是字符串，不是空。）
 */
 char* findDirEntry(FILE * fp, int clusterSrc, const char * url, int* clusterRes);
 /*
 两个str是否相等
 */
 int strEql(char* src, char* dest);
-/*
+/*个it个it个it
 字符串拼接
 */
 char* strAdd(const char* src, const char* dest);

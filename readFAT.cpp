@@ -91,11 +91,11 @@ cat文件。fp文件指针，clust是簇号，length是剩余的长度。递归�
 void catArc(FILE * fp, int clust, int length);
 /*
 从当前目录项下，找到url对应的目录的目录项。（递归调用直到url只剩一个文件名）
-fp文件指针，cluster指向是当前目录的目录项的簇号。通过cluster这个簇号来返回。
+fp文件指针，cluster指向是当前目录的目录个it项的簇号。通过cluster这个簇号来返回。
 返回目标对象的文件名（可能是目录也可能是文件）
 如果没找到，直接返回空串。（注意是字符串，不是空。）
 */
-char* findDirEntry(FILE * fp, int clusterSrc, const string url, int* clusterRes);
+int findDirEntry(FILE * fp, int clusterSrc, string url);
 // /*
 // 字符串拼接
 // */
@@ -111,7 +111,11 @@ url包括了路径和当前文件的文件名。
 void printDir(FILE * fp, int cluster, string url);
 //由于根目录的cluster的号和数据区的不一样，单独处理。
 void printRootDir(FILE * fp);
+void printURL(FILE* fp, string url);
 string NAME2Str(char* NAME);
+string getFirstNameUrl(string url);
+string validateURL(string url);//处理一下url前后的“/”问题
+
 
 //全局变量
 BPB bpb;/*
@@ -132,21 +136,17 @@ int main(int argc, char * argv[]){
     setBPB(fp);
     setFAT(fp);
     setDataSector();
-    readRootEntry(fp);
-    char inputStr[100];
+    //readRootEntry(fp);
+    printURL(fp, "/");
+    printURL(fp, "/HOUSE/");
+    string input;
+    while(1){
+        cout << "kkp:";
+        cin >> input;
+        printURL(fp, input);
+    }
     printStr("\033[31mkkp  k\n\033[0m");
-    // while(1){
-    //     scanf("%s", inputStr);
-    //     if(!strcmp(inputStr, "ls")){
-    //         printStr("cmd ls\n");
-    //     }else if(!strcmp(inputStr, "cat")){
-    //         printStr("cmd cat\n");
-    //     }else{
-    //         printStr("wrong command ");
-    //         printStr(inputStr);
-    //         printStr("\n");
-    //     }
-    // }
+
     printStr("kkp");
     
     
@@ -163,7 +163,10 @@ void readRootEntry(FILE* fp){
     //test
     //printDir(fp, entry[0].FstClust, "/" + NAME2Str(entry[0].NAME));
     //printDir(fp, 19 -31, "/");
-    printRootDir(fp);
+    //printRootDir(fp);
+    int resultCluster = 0;
+    resultCluster = findDirEntry(fp, 19 - 31, "/ABC/");
+    printDir(fp, resultCluster, "/ABC/SUBABC/");
     int a = 0;
     int b = 0;
     getDirSubNum(fp, entry[1].FstClust, &a, &b);
@@ -262,6 +265,9 @@ void getDirSubNum(FILE * fp, int cluster, int * dirNum, int * arcNum){
     }
 }
 void printDir(FILE * fp, int cluster, string url){
+    if(url.at(url.length() - 1) == '/'){
+        url = url.substr(0, url.length() - 1);
+    }
     Entry subEntry[16];//cnm，假设文件夹里最多16个文件
     fseek(fp, (dataSector + cluster * bpb.SecPerClus) * bpb.BytesPerSec, SEEK_SET);
     fread(subEntry, bpb.BytesPerSec, 1, fp);
@@ -350,33 +356,6 @@ void printRed(const string src){
     // printStr("\033[0m");
     printStr("\033[31m" + src + "\033[0m");
 }
-// void printRedName(const string src){
-//     char name[9];
-//     int i = 0;
-//     for(i = 0; i < 8;i++){
-//         if(*(src + i) == ' '){
-//             name[i] = '\0';
-//         }else{
-//             name[i] = *(src + i);
-//         }
-//     }
-//     name[8] = '\0';
-//     printRed(name);
-// }
-// void printName(const char* src){
-//     // char str[12];
-//     // int i = 0;
-//     // while(*(src + i) != ' '){
-//     //     str[i] = *(src + i);
-//     //     i++;
-//     // }
-//     // str[i] = '.';
-//     // str[i + 1] = *(src + 8);
-//     // str[i + 2] = *(src + 9);
-//     // str[i + 3] = *(src + 10);
-//     // str[i + 4] = '\0';
-//     // printStr(str);
-
 
 // }
 string NAME2Str(char* NAME){
@@ -398,9 +377,75 @@ string NAME2Str(char* NAME){
 }
 
 void printRootDir(FILE * fp){
-    printDir(fp, 19 - 31, "");
+    printDir(fp, 19 - 31, "/");
 }
 
+
+int findDirEntry(FILE * fp, int clusterSrc, string url){
+    if(url == "/"){
+        return 19 - 31;
+    }
+    if(url.at(url.length() - 1) != '/'){
+        url = url + "/";
+    }
+    string nowName = getFirstNameUrl(url);//最前面的一个文件夹。形式是“/kkp” 
+    string subUrl = url.substr(nowName.length(), url.length() - nowName.length());
+    Entry subEntry[16];//cnm，假设文件夹里最多16个文件
+    fseek(fp, (dataSector + clusterSrc * bpb.SecPerClus) * bpb.BytesPerSec, SEEK_SET);
+    fread(subEntry, bpb.BytesPerSec, 1, fp);
+    bool isLast = false;
+    int clusterRes;
+    //如果到最后了，就在找到之后返回，不在递归
+    if(subUrl == "/"){
+        //子目录中只有头尾有“/”
+        isLast = true;
+    }
+    
+    bool haveNowName = false;
+    for(int i = 0;i < 16;i++){
+         if("/" + NAME2Str(subEntry[i].NAME) == nowName){
+            haveNowName = true;
+            clusterRes = subEntry[i].FstClust;
+            if(!isLast){
+                clusterRes = findDirEntry(fp, clusterRes, subUrl);
+            }
+            break;
+         }
+    }
+    if(!haveNowName){
+        clusterRes = -1;
+    }
+    return clusterRes;
+}
+string getFirstNameUrl(string url){
+    for(int i = 1; i < url.length(); i++){
+        if(url.at(i) == '/'){
+            return url.substr(0, i);
+        }
+    }
+    return "";
+}
+void printURL(FILE* fp, string url){
+    if(url == "/"){
+        printRootDir(fp);
+        return;
+    }
+    url = validateURL(url);
+    int cluster = findDirEntry(fp, 19 - 31, url);
+    if(cluster == -1){
+        printStr("path error.\n");
+        return;
+    }
+    printDir(fp, cluster, url);
+}
+string validateURL(string url){
+    if(url.at(0) != '/'){
+        url = "/" + url;
+    }
+    if(url.at(url.length() - 1) != '/'){
+        url = url + "/";
+    }
+}
 #ifdef DEBUG
 void printStr(string str){
     cout << str;
