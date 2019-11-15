@@ -1,3 +1,4 @@
+#define DEBUG
 #include <iostream>
 #include <stdlib.h>
 #include <string>
@@ -250,10 +251,13 @@ void setFAT(FILE* fp){
         b = i % 2;
         if(i % 2 == 0){
             //高8位在第一个，低4位在第二个
-            *(FAT + i)  = (((uint16_t)(FAT2 + a)->entry2[0]) << 4) + ((((uint16_t)(FAT2 + a)->entry2[1]) & 0xF0) >> 4);
+            //*(FAT + i)  = (((uint16_t)(FAT2 + a)->entry2[0]) << 4) + ((((uint16_t)(FAT2 + a)->entry2[1]) & 0xF0) >> 4);
+            //第一个字节是低8位，第二个字节的低4位是高4位
+            *(FAT + i) = ((uint16_t)(FAT2 + a)->entry2[0]) + ((((uint16_t)(FAT2 + a)->entry2[1]) & 0x0F) << 8);
             
         }else{
-            *(FAT + i)  = ((((uint16_t) (FAT2 + a)->entry2[1]) & 0xF) << 8) + ((uint16_t)(FAT2 + a)->entry2[2]);
+            //第二个字节的高4位是低4位，第三个字节是高8位
+            *(FAT + i)  = ((((uint16_t) (FAT2 + a)->entry2[1]) & 0xF0) >> 4) + ((uint16_t)(FAT2 + a)->entry2[2] << 4);
         }
         
         // uint16_t* haha = (uint16_t)(FAT + i);
@@ -575,13 +579,15 @@ string getFileNameFromURL(string url){
     }
     return url.substr(start);
 }
+
+#ifdef DEBUG
+void printStrString(string str){
+    cout << str;
+}
+#else
 void printStrString(string str){
     const char* haha = str.c_str();
     
     printStr(haha);
-}
-#ifdef DEBUG
-void printStrString(string str){
-    cout << str;
 }
 #endif
