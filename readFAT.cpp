@@ -147,8 +147,14 @@ int main(int argc, char * argv[]){
         }else if(inputSplit.at(0) == "ls"){
             if(inputSplit.size() == 1){
                 printURL(fp, "/");
+                continue;
             }else if(inputSplit.size() == 2){
+                if(isL(inputSplit.at(1))){
+                    printURLL(fp, "/");
+                    continue;
+                }
                 printURL(fp, inputSplit.at(1));
+                continue;
             }else{
                 if(inputSplit.size() == 3){
                     if(isL(inputSplit.at(2))){
@@ -175,6 +181,7 @@ int main(int argc, char * argv[]){
             }
         }else if(inputSplit.at(0) == "cat"){
             catURL(fp, inputSplit.at(1));
+            continue;
         }else{
             printStrString("invalid command\n");
             continue;
@@ -447,11 +454,19 @@ void catURL(FILE* fp, string url){
     return;
 }
 void catArc(FILE * fp, int cluster, string FileName){
+    if(FileName == ""){
+        printStrString("can't cat a dir\n");
+        return;
+    }
     Entry subEntry[16];//cnm，假设文件夹里最多16个文件
     fseek(fp, (dataSector + cluster * bpb.SecPerClus) * bpb.BytesPerSec, SEEK_SET);
     fread(subEntry, bpb.BytesPerSec, 1, fp);
     for(int i = 0; i < 16; i++){
         if(NAME2Str(subEntry[i].NAME) == FileName){
+            if(subEntry[i].Attr == 0x10){
+                printStrString("can't cat a dir\n");
+                return;
+            }
             catFile(fp, subEntry[i].FstClust, subEntry[i].FileSize);
             return;
         }
